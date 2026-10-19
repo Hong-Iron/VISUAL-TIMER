@@ -620,6 +620,12 @@ btnSound.addEventListener('click', () => { S.sound = !S.sound; syncSound(); save
 
 const help = $('#help');
 $('#btnHelp').addEventListener('click', () => help.showModal());
+const supportDlg = $('#support');
+$('#btnSupport').addEventListener('click', () => { supportDlg.showModal(); M.sqv += 4; sfx.pop(); });
+$('#helpSupport').addEventListener('click', (e) => { e.preventDefault(); help.close(); supportDlg.showModal(); });
+document.querySelectorAll('[data-support]').forEach((a) => a.addEventListener('click', () => {
+  setTimeout(() => toast('Thank you!'), 300); M.hopV = 2.4; burst();
+}));
 
 function setTheme(i, bounce) {
   S.theme = (i + THEMES.length) % THEMES.length;
@@ -877,7 +883,7 @@ function cycleScale() {
 }
 
 window.addEventListener('keydown', (e) => {
-  if (e.target.closest('input, select, textarea') || help.open) return;
+  if (e.target.closest('input, select, textarea') || document.querySelector('dialog[open]')) return;
   const k = e.key.toLowerCase();
   if (e.code === 'Space') { e.preventDefault(); toggle(); }
   else if (k === 'r') reset();

@@ -38,6 +38,9 @@
 <header class="top">
   <div class="brand"><span class="logo"></span>Visual Timer</div>
   <div class="top-actions">
+    <button class="icon-btn heart" id="btnSupport" title="후원 · Support" aria-label="Support the maker">
+      <svg viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg>
+    </button>
     <button class="icon-btn" id="btnRecord" title="Record (H)" aria-label="Open record">
       <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
     </button>
@@ -109,6 +112,11 @@
   <div class="bars" id="bars"></div>
   <h3>Recent</h3>
   <ol class="log" id="log"></ol>
+  <div class="support-row">
+    <span>Like the timer?</span>
+    <a class="btn support kakao" href="https://qr.kakaopay.com/FKcOJKyOy1f405462" target="_blank" rel="noopener" data-support="kakaopay"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4C6.9 4 3 7.1 3 11c0 2.5 1.6 4.6 4 5.9L6.2 20l3.6-2.4c.7.1 1.4.2 2.2.2 5.1 0 9-3.1 9-7s-3.9-7-9-7z"/></svg>카카오페이</a>
+    <a class="btn support bmc" href="https://buymeacoffee.com/hongiron" target="_blank" rel="noopener" data-support="bmc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h12v5a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5V8zM17 9.5h1.5a2.5 2.5 0 0 1 0 5H17M8 3.5c0 1 .8 1 .8 2M11 3.5c0 1 .8 1 .8 2M14 3.5c0 1 .8 1 .8 2"/></svg>Coffee</a>
+  </div>
   <div class="drawer-foot">
     <span id="storeNote" class="note"></span>
     <button class="btn ghost small" id="btnExport">Export CSV</button>
@@ -140,6 +148,19 @@
   <div class="og-url">hong-iron.github.io/VISUAL-TIMER</div>
 </div>
 
+<dialog id="support" class="support-dlg">
+  <div class="share-head">
+    <h2>Support</h2>
+    <form method="dialog"><button class="icon-btn" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></form>
+  </div>
+  <p>If this timer kept you on track, you can buy me a coffee. It is free and stays free either way.</p>
+  <div class="support-links">
+    <a class="btn support kakao" href="https://qr.kakaopay.com/FKcOJKyOy1f405462" target="_blank" rel="noopener" data-support="kakaopay"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4C6.9 4 3 7.1 3 11c0 2.5 1.6 4.6 4 5.9L6.2 20l3.6-2.4c.7.1 1.4.2 2.2.2 5.1 0 9-3.1 9-7s-3.9-7-9-7z"/></svg>카카오페이로 후원</a>
+    <a class="btn support bmc" href="https://buymeacoffee.com/hongiron" target="_blank" rel="noopener" data-support="bmc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h12v5a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5V8zM17 9.5h1.5a2.5 2.5 0 0 1 0 5H17M8 3.5c0 1 .8 1 .8 2M11 3.5c0 1 .8 1 .8 2M14 3.5c0 1 .8 1 .8 2"/></svg>Buy me a coffee</a>
+  </div>
+  <p class="note">카카오페이 링크는 폰에서 열면 바로 송금 화면으로 가고, PC에서는 QR이 나온다.</p>
+</dialog>
+
 <dialog id="help">
   <h2>How to play</h2>
   <ul>
@@ -152,6 +173,7 @@
     <li>Every finished focus session drops a <b>tomato</b> on the desk. Poke them.</li>
     <li>Your sessions are saved in this browser. Open <b>Record</b> to see them, then <b>Share my record</b> for a brag card.</li>
   </ul>
+  <p class="help-support">Made by Hong-Iron. <a href="#" id="helpSupport">Support it</a></p>
   <p class="keys"><kbd>Space</kbd> start/pause · <kbd>R</kbd> reset · <kbd>↑</kbd><kbd>↓</kbd> ±1 min · <kbd>C</kbd> colour · <kbd>M</kbd> mute · <kbd>H</kbd> record</p>
   <form method="dialog"><button class="btn primary">Got it</button></form>
 </dialog>

@@ -16,3 +16,10 @@ Keys: `Space` start/pause · `R` reset · `↑`/`↓` ±1 min · `C` colour · `
 Link previews use `site/og.png`, rendered from the page itself with `?og` (headless Chrome at 1200×630).
 
 No build step: `site/` is plain HTML/CSS/JS with three.js from jsDelivr. Run locally with `python3 -m http.server -d site`.
+
+## Support
+
+If the timer helps you focus, you can buy me a coffee:
+
+- 카카오페이: https://qr.kakaopay.com/FKcOJKyOy1f405462
+- Buy Me a Coffee: https://buymeacoffee.com/hongiron
