@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Visual Timer</title>
+<meta name="description" content="A 3D visual countdown timer. Drag the dial, tap the knob, earn tomatoes. Set any time in HH:MM:SS.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='4' width='56' height='56' rx='16' fill='%239fe3c1'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%23f3f3f1'/%3E%3Cpath d='M32 32V12A20 20 0 0 1 51 38Z' fill='%2318a34a'/%3E%3Ccircle cx='32' cy='32' r='7' fill='%239fe3c1'/%3E%3C/svg%3E">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="scene" aria-label="3D timer. Drag the dial to set time, tap the knob to start or pause."></canvas>
+
+<header class="top">
+  <div class="brand"><span class="logo"></span>Visual Timer</div>
+  <div class="top-actions">
+    <button class="icon-btn" id="btnRecord" title="Record (H)" aria-label="Open record">
+      <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+    </button>
+    <button class="icon-btn" id="btnSound" title="Sound (M)" aria-label="Toggle sound">
+      <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="wave" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/><path class="mute" d="M16 9l5 6M21 9l-5 6"/></svg>
+    </button>
+    <button class="icon-btn" id="btnHelp" title="How to play (?)" aria-label="Help">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17.2v.1"/></svg>
+    </button>
+  </div>
+</header>
+
+<div id="hint" class="hint" hidden>
+  <b>Drag the dial</b> to set · <b>tap the knob</b> to start · <b>drag the body</b> to tilt · <b>poke it</b> for a boing
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<section class="panel" id="panel">
+  <div class="readout" role="timer" aria-live="off">
+    <span id="phase" class="phase">Focus</span>
+    <span id="digits" class="digits">25:00</span>
+  </div>
+
+  <div class="presets" role="group" aria-label="Pomodoro presets">
+    <button class="chip" data-preset="focus">Focus <small>25</small></button>
+    <button class="chip" data-preset="short">Short <small>5</small></button>
+    <button class="chip" data-preset="long">Long <small>15</small></button>
+    <span class="tally" id="tally" title="Focus sessions finished today"><i class="tomato"></i><span id="tallyN">0</span></span>
+  </div>
+
+  <div class="row set-row">
+    <div class="hms" role="group" aria-label="Set duration">
+      <label><input id="inH" inputmode="numeric" maxlength="2" value="00" aria-label="Hours"><span>h</span></label>
+      <b>:</b>
+      <label><input id="inM" inputmode="numeric" maxlength="2" value="25" aria-label="Minutes"><span>m</span></label>
+      <b>:</b>
+      <label><input id="inS" inputmode="numeric" maxlength="2" value="00" aria-label="Seconds"><span>s</span></label>
+    </div>
+    <select id="selScale" aria-label="Dial range" title="Dial range"></select>
+  </div>
+
+  <div class="row controls">
+    <button class="btn ghost" id="btnReset" title="Reset (R)">Reset</button>
+    <button class="btn primary" id="btnStart" title="Start / pause (Space)">Start</button>
+    <button class="btn ghost" id="btnPlus" title="Add one minute (↑)">+1 min</button>
+  </div>
+
+  <div class="row extras">
+    <div class="swatches" id="swatches" role="group" aria-label="Colour"></div>
+    <label class="toggle" title="Tick sound while running"><input type="checkbox" id="chkTick"><span></span>Tick</label>
+    <label class="toggle" title="Start the next pomodoro phase automatically"><input type="checkbox" id="chkAuto"><span></span>Auto</label>
+  </div>
+</section>
+
+<aside class="drawer" id="record" aria-label="Record" hidden>
+  <div class="drawer-head">
+    <h2>Record</h2>
+    <button class="icon-btn" id="btnCloseRecord" aria-label="Close record"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="stats">
+    <div><span id="stToday">0m</span><small>focus today</small></div>
+    <div><span id="stSessions">0</span><small>sessions today</small></div>
+    <div><span id="stStreak">0</span><small>day streak</small></div>
+    <div><span id="stTotal">0h</span><small>all-time focus</small></div>
+  </div>
+  <h3>Last 7 days</h3>
+  <div class="bars" id="bars"></div>
+  <h3>Recent</h3>
+  <ol class="log" id="log"></ol>
+  <div class="drawer-foot">
+    <span id="storeNote" class="note"></span>
+    <button class="btn ghost small" id="btnExport">Export CSV</button>
+    <button class="btn ghost small danger" id="btnClear">Clear</button>
+  </div>
+</aside>
+
+<dialog id="help">
+  <h2>How to play</h2>
+  <ul>
+    <li><b>Drag the dial</b> (or the knob) to set time. It clicks on every tick. Hold <kbd>Shift</kbd> for fine steps.</li>
+    <li><b>Tap the knob</b> to start or pause.</li>
+    <li><b>Scroll</b> over the timer to add or take away a step.</li>
+    <li><b>Drag the body</b> or the background to tilt it. Let go and it wobbles back.</li>
+    <li><b>Poke the body</b> and it hops. <b>Tap the green light</b> to change colour.</li>
+    <li><b>Tap the range badge</b> (60 MIN) to switch the dial between minutes and hours.</li>
+    <li>Every finished focus session drops a <b>tomato</b> on the desk. Poke them.</li>
+    <li>Your sessions are saved in this browser. Open <b>Record</b> to see them.</li>
+  </ul>
+  <p class="keys"><kbd>Space</kbd> start/pause · <kbd>R</kbd> reset · <kbd>↑</kbd><kbd>↓</kbd> ±1 min · <kbd>C</kbd> colour · <kbd>M</kbd> mute · <kbd>H</kbd> record</p>
+  <form method="dialog"><button class="btn primary">Got it</button></form>
+</dialog>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
