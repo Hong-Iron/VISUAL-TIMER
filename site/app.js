@@ -323,7 +323,9 @@ function labelFor(i, sc) {
 }
 const BADGE = { x: -1.0, y: -1.1, w: 0.42, h: 0.17 };
 
+let faceVer = 0;
 function drawFace(sc) {
+  faceVer++;
   const { c, ctx } = faceTex, S2 = c.width, u = S2 / FACE;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, S2, S2);
   ctx.setTransform(u, 0, 0, -u, S2 / 2, S2 / 2); // unit coords, y up, origin in the middle
@@ -890,6 +892,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'c') setTheme(S.theme + 1, true);
   else if (k === 'm') btnSound.click();
   else if (k === 'h') openRecord(drawer.hidden);
+  else if (k === 'p') openPip();
   else if (k === '?' || k === '/') help.showModal();
   else if (e.key === 'ArrowUp') { e.preventDefault(); addTime(60); }
   else if (e.key === 'ArrowDown') { e.preventDefault(); addTime(-60); }
@@ -1226,6 +1229,188 @@ $('#btnCopy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(txt); toast('Text copied'); } catch (e2) { toast('Copy blocked by the browser'); }
   }
 });
+
+/* ------------------------------------------------------------------ picture-in-picture */
+// A flat, head-on drawing of the timer's front for a small always-on-top window.
+// Chrome/Edge desktop get Document PiP (real buttons); others get a video PiP of the same drawing.
+const hasDocPip = 'documentPictureInPicture' in window;
+const vidProbe = document.createElement('video');
+const hasVidPip = !!(document.pictureInPictureEnabled || (vidProbe.webkitSupportsPresentationMode && vidProbe.webkitSupportsPresentationMode('picture-in-picture')))
+  && typeof HTMLCanvasElement.prototype.captureStream === 'function';
+const pipCache = { size: 0, ver: -1, face: null, ticks: null };
+function scaledCopy(src, px) {
+  const c = document.createElement('canvas'); c.width = c.height = px;
+  const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+  // halve in steps so thin lines stay crisp
+  let cur = src, s = src.width;
+  while (s / 2 > px) {
+    const t = document.createElement('canvas'); t.width = t.height = s / 2;
+    const tg = t.getContext('2d'); tg.imageSmoothingQuality = 'high'; tg.drawImage(cur, 0, 0, s / 2, s / 2);
+    cur = t; s /= 2;
+  }
+  g.drawImage(cur, 0, 0, px, px);
+  return c;
+}
+function drawFront(g, W, H, time) {
+  const N = Math.min(W, H), k = N / 3.8, cx = W / 2, cy = H / 2, t = THEMES[S.theme];
+  const facePx = Math.round(2.76 * k);
+  if (pipCache.size !== facePx || pipCache.ver !== faceVer) {
+    pipCache.face = scaledCopy(faceTex.c, facePx); pipCache.ticks = scaledCopy(tickTex.c, facePx);
+    pipCache.size = facePx; pipCache.ver = faceVer;
+  }
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.fillStyle = t.bg2; g.fillRect(0, 0, W, H);
+  g.translate(cx, cy);
+  if (M.ringT >= 0) g.rotate(Math.sin(time * 48) * 0.06 * Math.max(0, 1 - M.ringT / 4.5));
+  const pul = 1 + M.pulse * 0.03; g.scale(pul, pul);
+
+  // body with soft light from the top-left
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,0.22)'; g.shadowBlur = 0.25 * k; g.shadowOffsetY = 0.08 * k;
+  g.fillStyle = t.body; g.beginPath(); g.roundRect(-1.8 * k, -1.8 * k, 3.6 * k, 3.6 * k, 1.0 * k); g.fill();
+  g.restore();
+  const sheen = g.createLinearGradient(-1.8 * k, -1.8 * k, 1.8 * k, 1.8 * k);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.28)'); sheen.addColorStop(0.5, 'rgba(255,255,255,0)'); sheen.addColorStop(1, 'rgba(0,0,0,0.12)');
+  g.fillStyle = sheen; g.beginPath(); g.roundRect(-1.8 * k, -1.8 * k, 3.6 * k, 3.6 * k, 1.0 * k); g.fill();
+  // bezel lip
+  g.fillStyle = t.lip; g.beginPath(); g.roundRect(-1.55 * k, -1.55 * k, 3.1 * k, 3.1 * k, 0.73 * k); g.fill();
+  g.strokeStyle = 'rgba(0,0,0,0.1)'; g.lineWidth = Math.max(1, 0.015 * k); g.stroke();
+
+  // face, wedge, ticks
+  const half = facePx / 2;
+  g.drawImage(pipCache.face, -half, -half, facePx, facePx);
+  const frac = clamp(remainingNow() / S.scale, 0, 1);
+  if (frac > 0) {
+    g.fillStyle = t.wedge; g.beginPath(); g.moveTo(0, 0);
+    g.arc(0, 0, 0.965 * k, -Math.PI / 2, -Math.PI / 2 + frac * TAU); g.closePath(); g.fill();
+  }
+  g.drawImage(pipCache.ticks, -half, -half, facePx, facePx);
+
+  // knob: shadow, body, knurled rim turning with the wedge edge
+  const r = 0.375 * k;
+  g.save(); g.shadowColor = 'rgba(0,0,0,0.3)'; g.shadowBlur = 0.12 * k; g.shadowOffsetX = 0.03 * k; g.shadowOffsetY = 0.05 * k;
+  g.fillStyle = t.lip; g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fill(); g.restore();
+  const kg = g.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.1, 0, 0, r);
+  kg.addColorStop(0, 'rgba(255,255,255,0.35)'); kg.addColorStop(1, 'rgba(0,0,0,0.08)');
+  g.fillStyle = kg; g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fill();
+  g.save(); g.rotate(-M.knobAngle);
+  g.strokeStyle = 'rgba(0,0,0,0.16)'; g.lineWidth = Math.max(0.6, 0.008 * k);
+  for (let i = 0; i < 64; i++) {
+    const a = (i / 64) * TAU; g.beginPath();
+    g.moveTo(Math.cos(a) * r * 0.86, Math.sin(a) * r * 0.86); g.lineTo(Math.cos(a) * r, Math.sin(a) * r); g.stroke();
+  }
+  g.restore();
+  g.fillStyle = t.lip; g.beginPath(); g.arc(0, 0, r * 0.8, 0, TAU); g.fill();
+  g.fillStyle = kg; g.fill();
+
+  // status light: steady in the mini window (no pulse or blink)
+  const lx = -1.02 * k, ly = -1.02 * k, lr = 0.075 * k;
+  let on = 0, col = '#22ff66';
+  if (M.ringT >= 0) { col = '#ff3b30'; on = 1; }
+  else if (S.running) on = 0.8;
+  if (on > 0.05) {
+    const lg = g.createRadialGradient(lx, ly, 0, lx, ly, lr * 4);
+    lg.addColorStop(0, col); lg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.globalAlpha = on * 0.7; g.fillStyle = lg; g.beginPath(); g.arc(lx, ly, lr * 4, 0, TAU); g.fill(); g.globalAlpha = 1;
+  }
+  g.fillStyle = on > 0.05 ? col : '#2b2b2b'; g.beginPath(); g.arc(lx, ly, lr, 0, TAU); g.fill();
+}
+
+const pip = { win: null, video: null, canvas: null, timer: 0, raf: 0 };
+const btnPip = $('#btnPip');
+if (hasDocPip || hasVidPip) btnPip.hidden = false;
+
+async function openPip() {
+  if (pip.win) { pip.win.close(); return; }
+  if (pip.video && document.pictureInPictureElement === pip.video) { document.exitPictureInPicture(); return; }
+  ac();
+  if (hasDocPip) {
+    try { await openDocPip(); return; } catch (e) { if (!hasVidPip) { toast('Picture-in-picture was blocked'); return; } }
+  }
+  if (hasVidPip) openVideoPip();
+  else toast('This browser has no picture-in-picture');
+}
+
+async function openDocPip() {
+  const w = await window.documentPictureInPicture.requestWindow({ width: 280, height: 280 });
+  pip.win = w;
+  const d = w.document;
+  d.title = 'Visual Timer';
+  const st = d.createElement('style');
+  st.textContent = `
+    html,body{margin:0;height:100%;overflow:hidden;background:${THEMES[S.theme].bg2};font-family:Inter,system-ui,sans-serif}
+    canvas{display:block;width:100vw;height:100vh;cursor:pointer}
+    .bar{position:fixed;left:50%;bottom:8px;transform:translateX(-50%);display:flex;gap:6px;align-items:center;
+      padding:5px 6px;border-radius:999px;background:rgba(20,22,24,.72);color:#fff;opacity:0;transition:opacity .2s;
+      backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);white-space:nowrap}
+    body:hover .bar,.bar:focus-within{opacity:1}
+    .bar span{font:700 13px/1 Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;padding:0 6px}
+    .bar button{border:0;background:rgba(255,255,255,.14);color:#fff;border-radius:999px;height:26px;min-width:26px;padding:0 9px;
+      font:600 12px Inter,system-ui,sans-serif;cursor:pointer}
+    .bar button:hover{background:rgba(255,255,255,.26)}`;
+  d.head.appendChild(st);
+  d.body.innerHTML = `<canvas></canvas><div class="bar"><span id="t"></span><button id="go">Start</button><button id="rs" title="Reset">↺</button><button id="pl" title="Add one minute">+1</button></div>`;
+  const cv = d.querySelector('canvas'), g = cv.getContext('2d');
+  d.getElementById('go').addEventListener('click', () => toggle());
+  d.getElementById('rs').addEventListener('click', () => reset());
+  d.getElementById('pl').addEventListener('click', () => addTime(60));
+  cv.addEventListener('click', (e) => {
+    // tap the knob to start/pause, tap anywhere else to stop the alarm
+    const r = cv.getBoundingClientRect(), N = Math.min(r.width, r.height), k = N / 3.8;
+    const dx = e.clientX - r.left - r.width / 2, dy = e.clientY - r.top - r.height / 2;
+    if (Math.hypot(dx, dy) < 0.45 * k || M.ringT >= 0) toggle();
+  });
+  w.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); toggle(); } });
+  const t0 = performance.now();
+  const loop = () => {
+    if (!pip.win) return;
+    const dpr = w.devicePixelRatio || 1, W = Math.round(w.innerWidth * dpr), H = Math.round(w.innerHeight * dpr);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    drawFront(g, W, H, (performance.now() - t0) / 1000);
+    d.body.style.background = THEMES[S.theme].bg2;
+    d.getElementById('t').textContent = fmt(remainingNow(), S.total >= 3600);
+    d.getElementById('go').textContent = M.ringT >= 0 ? 'Stop' : S.running ? 'Pause' : 'Start';
+    pip.raf = w.requestAnimationFrame(loop);
+  };
+  loop();
+  w.addEventListener('pagehide', () => { pip.win = null; btnPip.classList.remove('on'); });
+  btnPip.classList.add('on');
+}
+
+function openVideoPip() {
+  if (!pip.video) {
+    pip.canvas = document.createElement('canvas'); pip.canvas.width = pip.canvas.height = 480;
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.autoplay = true;
+    v.srcObject = pip.canvas.captureStream(30);
+    v.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;bottom:0;left:0';
+    document.body.appendChild(v);
+    v.addEventListener('leavepictureinpicture', () => { clearInterval(pip.timer); btnPip.classList.remove('on'); });
+    pip.video = v;
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({ title: 'Visual Timer', artist: 'Hong-Iron' });
+        // the PiP play/pause button runs the timer; the video itself keeps playing
+        navigator.mediaSession.setActionHandler('play', () => { if (!S.running) start(); v.play(); });
+        navigator.mediaSession.setActionHandler('pause', () => { if (S.running) pause(); else stopRinging(); v.play(); });
+      } catch (e) { /* ignore */ }
+    }
+  }
+  const g = pip.canvas.getContext('2d'), t0 = performance.now();
+  const draw = () => drawFront(g, 480, 480, (performance.now() - t0) / 1000);
+  draw();
+  clearInterval(pip.timer);
+  pip.timer = setInterval(draw, 1000 / 20); // timers keep running in a hidden tab (about once a second)
+  const v = pip.video;
+  v.play().then(() => {
+    if (v.requestPictureInPicture) return v.requestPictureInPicture();
+    v.webkitSetPresentationMode('picture-in-picture');
+    return null;
+  }).then(() => btnPip.classList.add('on'))
+    .catch(() => toast('Picture-in-picture was blocked'));
+}
+btnPip.addEventListener('click', openPip);
+window.__vt_pip = { drawFront, hasDocPip, hasVidPip };
 
 /* ------------------------------------------------------------------ boot */
 drawFace(S.scale); drawTicks();
