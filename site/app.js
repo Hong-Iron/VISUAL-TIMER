@@ -760,12 +760,12 @@ const angleOf = (p) => { let a = Math.atan2(p.x, p.y); if (a < 0) a += TAU; retu
 const wrapPi = (a) => { while (a > Math.PI) a -= TAU; while (a < -Math.PI) a += TAU; return a; };
 
 function stepFor(e) { return e.shiftKey ? Math.max(1, S.scale / 3600) : S.scale / 60; }
-function dialSet(sec, e) {
+function dialSet(sec, e, d = drag) {
   const st = stepFor(e);
   const v = clamp(Math.round(sec / st) * st, 0, S.scale);
-  if (v !== drag.lastVal) {
-    sfx.click(); drag.lastVal = v;
-    if (navigator.vibrate) try { navigator.vibrate(4); } catch (err) { /* ignore */ }
+  if (v !== d.lastVal) {
+    sfx.click(); d.lastVal = v;
+    if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) try { navigator.vibrate(4); } catch (err) { /* ignore */ }
   }
   S.remaining = v; S.total = v;
   S.phase = Object.keys(PRESETS).find((k) => PRESETS[k] === v) || 'custom';
@@ -796,15 +796,25 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.classList.add('dragging');
 });
 
-function startDial(e, p) {
+function startDial(e, p, d = drag) {
   stopRinging(); clearTimeout(nextPhaseTimer);
-  drag.wasRunning = S.running;
+  d.wasRunning = S.running;
   if (S.running) { S.remaining = remainingNow(); S.running = false; }
-  drag.acc = angleOf(p);
+  d.acc = angleOf(p);
   // grabbing near the top of a full dial means "keep it full", not "drop to zero"
-  if (S.remaining >= S.scale * 0.95 && drag.acc < 0.35) drag.acc = TAU;
-  drag.prevA = angleOf(p);
-  dialSet((drag.acc / TAU) * S.scale, e);
+  if (S.remaining >= S.scale * 0.95 && d.acc < 0.35) d.acc = TAU;
+  d.prevA = angleOf(p);
+  dialSet((d.acc / TAU) * S.scale, e, d);
+}
+function moveDial(e, p, d = drag) {
+  const a = angleOf(p);
+  d.acc = clamp(d.acc + wrapPi(a - d.prevA), 0, TAU);
+  d.prevA = a;
+  dialSet((d.acc / TAU) * S.scale, e, d);
+}
+function endDial(d) {
+  if (S.remaining > 0 && d.wasRunning) start(); else syncUI();
+  save();
 }
 
 canvas.addEventListener('pointermove', (e) => {
@@ -827,10 +837,7 @@ canvas.addEventListener('pointermove', (e) => {
   }
   if (drag.kind === 'dial') {
     const p = dialPoint(e); if (!p) return;
-    const a = angleOf(p);
-    drag.acc = clamp(drag.acc + wrapPi(a - drag.prevA), 0, TAU);
-    drag.prevA = a;
-    dialSet((drag.acc / TAU) * S.scale, e);
+    moveDial(e, p);
   } else if ((drag.kind === 'tilt' || drag.kind === 'body') && drag.moved) {
     const ny = clamp(drag.ty0 + dx * 0.007, -1.1, 1.1), nx = clamp(drag.tx0 + dy * 0.005, -0.55, 0.55);
     M.tvy = (ny - M.ty) * 60; M.tvx = (nx - M.tx) * 60;
@@ -842,11 +849,8 @@ function endDrag(e) {
   if (!drag || e.pointerId !== drag.id) return;
   const d = drag; drag = null;
   canvas.classList.remove('dragging');
-  if (d.kind === 'dial') {
-    if (S.remaining > 0 && d.wasRunning) start();
-    else { syncUI(); }
-    save();
-  } else if (!d.moved) {
+  if (d.kind === 'dial') endDial(d);
+  else if (!d.moved) {
     if (d.kind === 'knob') toggle();
     else if (d.kind === 'led') setTheme(S.theme + 1, true);
     else if (d.kind === 'badge') cycleScale();
@@ -858,7 +862,7 @@ function endDrag(e) {
 canvas.addEventListener('pointerup', endDrag);
 canvas.addEventListener('pointercancel', endDrag);
 
-canvas.addEventListener('wheel', (e) => {
+function wheelDial(e) {
   e.preventDefault();
   if (S.running && M.ringT < 0) { addTime(e.deltaY < 0 ? S.scale / 60 : -S.scale / 60); return; }
   const st = S.scale / 60;
@@ -866,7 +870,8 @@ canvas.addEventListener('wheel', (e) => {
   stopRinging();
   S.remaining = v; S.total = v; S.phase = Object.keys(PRESETS).find((k) => PRESETS[k] === v) || 'custom';
   sfx.click(); syncInputs(); syncUI(); save();
-}, { passive: false });
+}
+canvas.addEventListener('wheel', wheelDial, { passive: false });
 
 function poke(x) {
   M.hopV = 3.2; M.rvz += (x >= 0 ? -1 : 1) * 3.5; M.sqv -= 4; sfx.boing();
@@ -1339,7 +1344,8 @@ async function openDocPip() {
   const st = d.createElement('style');
   st.textContent = `
     html,body{margin:0;height:100%;overflow:hidden;background:${THEMES[S.theme].bg2};font-family:Inter,system-ui,sans-serif}
-    canvas{display:block;width:100vw;height:100vh;cursor:pointer}
+    canvas{display:block;width:100vw;height:100vh;touch-action:none;user-select:none}
+    canvas.dragging{cursor:grabbing!important}
     .bar{position:fixed;left:50%;bottom:8px;transform:translateX(-50%);display:flex;gap:6px;align-items:center;
       padding:5px 6px;border-radius:999px;background:rgba(20,22,24,.72);color:#fff;opacity:0;transition:opacity .2s;
       backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);white-space:nowrap}
@@ -1354,12 +1360,44 @@ async function openDocPip() {
   d.getElementById('go').addEventListener('click', () => toggle());
   d.getElementById('rs').addEventListener('click', () => reset());
   d.getElementById('pl').addEventListener('click', () => addTime(60));
-  cv.addEventListener('click', (e) => {
-    // tap the knob to start/pause, tap anywhere else to stop the alarm
-    const r = cv.getBoundingClientRect(), N = Math.min(r.width, r.height), k = N / 3.8;
-    const dx = e.clientX - r.left - r.width / 2, dy = e.clientY - r.top - r.height / 2;
-    if (Math.hypot(dx, dy) < 0.45 * k || M.ringT >= 0) toggle();
+  // face coordinates in timer units, y up (same as the 3D dial)
+  const facePt = (e) => {
+    const r = cv.getBoundingClientRect(), k = Math.min(r.width, r.height) / 3.8;
+    return { x: (e.clientX - r.left - r.width / 2) / k, y: -(e.clientY - r.top - r.height / 2) / k };
+  };
+  let pd = null;
+  cv.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    ac(); try { cv.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events */ }
+    const p = facePt(e), r = Math.hypot(p.x, p.y);
+    pd = { id: e.pointerId, x0: e.clientX, y0: e.clientY, moved: false, lastVal: -1,
+      kind: r < 0.45 ? 'knob' : r < 1.3 ? 'dial' : 'none' };
+    if (pd.kind === 'dial' && M.ringT < 0) startDial(e, p, pd);
+    else if (pd.kind === 'knob') { M.pressV -= 4; sfx.thunk(); }
+    cv.classList.add('dragging');
   });
+  cv.addEventListener('pointermove', (e) => {
+    if (!pd || e.pointerId !== pd.id) {
+      const r = Math.hypot(facePt(e).x, facePt(e).y);
+      cv.style.cursor = r < 0.45 ? 'pointer' : r < 1.3 ? 'grab' : 'default';
+      return;
+    }
+    if (!pd.moved && Math.hypot(e.clientX - pd.x0, e.clientY - pd.y0) > 4) {
+      pd.moved = true;
+      if (pd.kind === 'knob' && M.ringT < 0) { pd.kind = 'dial'; startDial(e, facePt(e), pd); } // turning the knob turns the dial
+    }
+    if (pd.kind === 'dial' && pd.acc !== undefined) moveDial(e, facePt(e), pd);
+  });
+  const pipUp = (e) => {
+    if (!pd || e.pointerId !== pd.id) return;
+    const d = pd; pd = null; cv.classList.remove('dragging');
+    if (M.ringT >= 0 && !d.moved) { stopRinging(); syncUI(); return; }
+    if (d.kind === 'dial' && d.acc !== undefined) endDial(d);
+    else if (d.kind === 'knob' && !d.moved) toggle();
+  };
+  cv.addEventListener('pointerup', pipUp);
+  cv.addEventListener('pointercancel', pipUp);
+  cv.addEventListener('wheel', wheelDial, { passive: false });
   w.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); toggle(); } });
   const t0 = performance.now();
   const loop = () => {
