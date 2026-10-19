@@ -5,6 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Visual Timer</title>
 <meta name="description" content="A 3D visual countdown timer. Drag the dial, tap the knob, earn tomatoes. Set any time in HH:MM:SS.">
+<meta name="theme-color" content="#cfeedf">
+<link rel="canonical" href="https://hong-iron.github.io/VISUAL-TIMER/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Visual Timer">
+<meta property="og:url" content="https://hong-iron.github.io/VISUAL-TIMER/">
+<meta property="og:title" content="Visual Timer · a 3D pomodoro timer you can poke">
+<meta property="og:description" content="Drag the dial, tap the knob, earn tomatoes. Any time from seconds to 99 hours, a saved record, and brag cards.">
+<meta property="og:image" content="https://hong-iron.github.io/VISUAL-TIMER/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A mint green 3D disc timer showing 25 minutes, next to the words Visual Timer">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Visual Timer · a 3D pomodoro timer you can poke">
+<meta name="twitter:description" content="Drag the dial, tap the knob, earn tomatoes. Saved record and brag cards.">
+<meta name="twitter:image" content="https://hong-iron.github.io/VISUAL-TIMER/og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -89,6 +104,7 @@
     <div><span id="stStreak">0</span><small>day streak</small></div>
     <div><span id="stTotal">0h</span><small>all-time focus</small></div>
   </div>
+  <button class="btn primary brag" id="btnBrag">Share my record</button>
   <h3>Last 7 days</h3>
   <div class="bars" id="bars"></div>
   <h3>Recent</h3>
@@ -100,6 +116,30 @@
   </div>
 </aside>
 
+<dialog id="share" class="share">
+  <div class="share-head">
+    <h2>Brag card</h2>
+    <form method="dialog"><button class="icon-btn" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></form>
+  </div>
+  <div class="seg" role="group" aria-label="Period">
+    <button data-period="today">Today</button><button data-period="week">7 days</button><button data-period="all">All time</button>
+  </div>
+  <img id="cardImg" class="card-img" alt="Your focus record as an image card">
+  <div class="share-actions">
+    <button class="btn primary" id="btnShareNative">Share</button>
+    <button class="btn ghost" id="btnSave">Save image</button>
+    <button class="btn ghost" id="btnCopy">Copy</button>
+    <a class="btn ghost" id="btnX" target="_blank" rel="noopener">Post on X</a>
+  </div>
+</dialog>
+
+<div class="og-text" aria-hidden="true">
+  <div class="og-brand"><span class="logo"></span>Visual Timer</div>
+  <h1>A 3D timer<br>you can poke.</h1>
+  <p>Pomodoro or any time up to 99 hours. Drag the dial, tap the knob, earn tomatoes, brag about it.</p>
+  <div class="og-url">hong-iron.github.io/VISUAL-TIMER</div>
+</div>
+
 <dialog id="help">
   <h2>How to play</h2>
   <ul>
@@ -110,7 +150,7 @@
     <li><b>Poke the body</b> and it hops. <b>Tap the green light</b> to change colour.</li>
     <li><b>Tap the range badge</b> (60 MIN) to switch the dial between minutes and hours.</li>
     <li>Every finished focus session drops a <b>tomato</b> on the desk. Poke them.</li>
-    <li>Your sessions are saved in this browser. Open <b>Record</b> to see them.</li>
+    <li>Your sessions are saved in this browser. Open <b>Record</b> to see them, then <b>Share my record</b> for a brag card.</li>
   </ul>
   <p class="keys"><kbd>Space</kbd> start/pause · <kbd>R</kbd> reset · <kbd>↑</kbd><kbd>↓</kbd> ±1 min · <kbd>C</kbd> colour · <kbd>M</kbd> mute · <kbd>H</kbd> record</p>
   <form method="dialog"><button class="btn primary">Got it</button></form>

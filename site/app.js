@@ -64,12 +64,14 @@ const S = {
   phase: 'focus', focusInCycle: 0,
   history: [], // {t: end time ms, p: phase, d: seconds}
 };
-const saved = store.read();
+const OG = new URLSearchParams(location.search).has('og'); // thumbnail mode: demo state, nothing saved
+const saved = OG ? null : store.read();
 if (saved) Object.assign(S, saved);
 if (!Array.isArray(S.history)) S.history = [];
 if (!SCALES.includes(S.scale)) S.scale = 3600;
 let saveTimer = 0;
 function save(now = false) {
+  if (OG) return;
   clearTimeout(saveTimer);
   const doit = () => store.write({
     theme: S.theme, sound: S.sound, tick: S.tick, auto: S.auto, seenHint: S.seenHint,
@@ -149,7 +151,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.VSMShadowMap; // blurred, soft-edged shadows
 
 const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -159,19 +161,37 @@ const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
 const camTarget = new THREE.Vector3(0, -0.2, 0.6);
 
 const key = new THREE.DirectionalLight(0xffffff, 1.9);
-key.position.set(-4, 8, 7);
+key.position.set(-2.6, 10, 4.5); // high and a little to the front-left: short shadow falling back-right
 key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
-key.shadow.camera.left = -6; key.shadow.camera.right = 6;
-key.shadow.camera.top = 6; key.shadow.camera.bottom = -6;
-key.shadow.radius = 6; key.shadow.bias = -0.0006;
+key.shadow.camera.left = -9; key.shadow.camera.right = 9;
+key.shadow.camera.top = 9; key.shadow.camera.bottom = -9;
+key.shadow.camera.near = 2; key.shadow.camera.far = 26;
+key.shadow.radius = 12; key.shadow.blurSamples = 20; key.shadow.bias = -0.0004;
 scene.add(key);
 scene.add(new THREE.HemisphereLight(0xffffff, 0xb8c8c0, 0.35));
 
 const DESK_Y = -1.8;
-const desk = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.16 }));
+const desk = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.2 }));
 desk.rotation.x = -Math.PI / 2; desk.position.y = DESK_Y; desk.receiveShadow = true;
 scene.add(desk);
+
+// contact shadows: a dark blur right where things touch the desk, so nothing looks like it floats
+function blurTex(w, h, r, blur) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const g = c.getContext('2d'), sx = 256 / (w + blur * 4), sy = 256 / (h + blur * 4);
+  g.translate(128, 128); g.scale(sx, sy);
+  g.filter = `blur(${blur * Math.min(sx, sy)}px)`;
+  g.fillStyle = '#000'; g.beginPath(); g.roundRect(-w / 2, -h / 2, w, h, r); g.fill();
+  const t = new THREE.CanvasTexture(c); return { t, w: w + blur * 4, h: h + blur * 4 };
+}
+const bodyBlur = blurTex(3.5, 1.3, 0.55, 0.16);
+const contact = new THREE.Mesh(new THREE.PlaneGeometry(bodyBlur.w, bodyBlur.h),
+  new THREE.MeshBasicMaterial({ map: bodyBlur.t, color: '#000', transparent: true, opacity: 0.42, depthWrite: false }));
+contact.rotation.order = 'YXZ'; contact.rotation.x = -Math.PI / 2; contact.position.y = DESK_Y + 0.004; contact.renderOrder = 1;
+scene.add(contact);
+const tomatoBlur = blurTex(0.36, 0.36, 0.18, 0.06);
+const tomatoShadowGeo = new THREE.PlaneGeometry(tomatoBlur.w, tomatoBlur.h);
 
 // root: position/hop + spin; tilt: drag tilt + wobble; dial: the face
 const root = new THREE.Group(); scene.add(root);
@@ -390,11 +410,14 @@ function addTomato(dropIn) {
   g.position.copy(slot); g.rotation.y = Math.random() * TAU;
   g.userData = { kind: 'tomato', home: slot.clone(), vy: 0, y: dropIn ? 4.5 : 0, sq: 0, sqv: 0, spin: 0 };
   g.traverse((o) => { o.userData.kind = 'tomato'; o.userData.ref = g; });
+  const sh = new THREE.Mesh(tomatoShadowGeo, new THREE.MeshBasicMaterial({ map: tomatoBlur.t, color: '#000', transparent: true, opacity: 0.4, depthWrite: false }));
+  sh.rotation.x = -Math.PI / 2; sh.position.set(slot.x, DESK_Y + 0.004, slot.z); sh.renderOrder = 1;
+  g.userData.shadow = sh; scene.add(sh);
   scene.add(g); tomatoes.push(g);
 }
 function syncTomatoes() {
   const n = Math.min(24, todayFocus().length);
-  while (tomatoes.length > n) { const t = tomatoes.pop(); scene.remove(t); }
+  while (tomatoes.length > n) { const t = tomatoes.pop(); scene.remove(t); scene.remove(t.userData.shadow); }
   while (tomatoes.length < n) addTomato(false);
 }
 
@@ -873,9 +896,9 @@ function resize() {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   // free area for the timer: below the top bar and beside or above the panel
-  const pr = document.getElementById('panel').getBoundingClientRect();
-  const side = pr.left > w * 0.45;
-  const top = 60, bottom = side ? h - 8 : pr.top - 8;
+  const pr = OG ? { left: w - 600, top: h } : document.getElementById('panel').getBoundingClientRect();
+  const side = OG || pr.left > w * 0.45;
+  const top = OG ? 0 : 60, bottom = side ? h - 8 : pr.top - 8;
   const left = 0, right = side ? pr.left - 8 : w;
   const aw = right - left, ah = Math.max(120, bottom - top);
   const worldH = 4.9, worldW = 5.4, tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
@@ -959,6 +982,9 @@ function frame() {
   const idle = drag ? 0 : Math.sin(t * 0.8) * 0.025;
   root.position.y = M.hop;
   root.rotation.set(0, REST_Y + spin, 0);
+  contact.rotation.y = REST_Y + spin + M.ty * 0.3;
+  contact.material.opacity = 0.42 * clamp(1 - M.hop / 1.2 - Math.abs(M.tx) * 0.8, 0.15, 1);
+  const cs = 1 + M.hop * 0.25; contact.scale.set(cs, cs, 1);
   tilt.rotation.set(M.tx + idle, M.ty, M.rz + ring);
   const sq = M.sq * 0.06, pul = M.pulse * 0.025;
   tilt.scale.set(1 - sq * 0.5 + pul, 1 + sq + pul, 1 - sq * 0.5 + pul);
@@ -984,6 +1010,8 @@ function frame() {
     u.spin *= Math.pow(0.1, dt);
     g.rotation.y += u.spin * dt;
     g.position.set(u.home.x, u.home.y + u.y, u.home.z);
+    u.shadow.material.opacity = 0.4 * clamp(1 - u.y / 1.5, 0.1, 1);
+    u.shadow.scale.setScalar(1 + u.y * 0.3);
     const s = u.sq * 0.12;
     g.scale.set(1 - s * 0.6, 1 + s, 1 - s * 0.6);
   }
@@ -1010,6 +1038,189 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
+/* ------------------------------------------------------------------ brag card */
+const SITE = 'https://hong-iron.github.io/VISUAL-TIMER/';
+const RANKS = [ // minutes of focus in one day
+  [0, 'Just warming up'], [25, 'Tomato Sprout'], [50, 'Steady Ticker'], [100, 'Pomodoro Pro'],
+  [200, 'Focus Machine'], [300, 'Deep Work Wizard'], [480, 'Time Lord'],
+];
+const PERIODS = {
+  today: { label: 'today', days: 1, rankScale: 1 },
+  week: { label: 'in the last 7 days', days: 7, rankScale: 5 },
+  all: { label: 'all time', days: 0, rankScale: 30 },
+};
+function focusByDay() {
+  const byDay = {};
+  S.history.forEach((h) => { if (h.p === 'focus') { const k = dayKey(h.t); byDay[k] = (byDay[k] || 0) + h.d; } });
+  return byDay;
+}
+function streakDays(byDay) {
+  let n = 0; const d = new Date();
+  if (!byDay[dayKey(d)]) d.setDate(d.getDate() - 1);
+  while (byDay[dayKey(d)]) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+function periodStats(pk) {
+  const P = PERIODS[pk], byDay = focusByDay();
+  let since = 0;
+  if (P.days) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (P.days - 1)); since = d.getTime(); }
+  const items = S.history.filter((h) => h.p === 'focus' && h.t >= since);
+  const sec = items.reduce((a, h) => a + h.d, 0);
+  const days = Object.entries(byDay).filter(([k]) => !P.days || new Date(k + 'T00:00').getTime() >= since);
+  const best = days.reduce((a, [, v]) => Math.max(a, v), 0);
+  const mins = sec / 60 / P.rankScale;
+  const rank = RANKS.filter(([m]) => mins >= m).pop()[1];
+  return { sec, n: items.length, streak: streakDays(byDay), best, rank, byDay, label: P.label };
+}
+
+// Render the live 3D timer into an image, framed for the card.
+function snapshot(w, h) {
+  const prevW = renderer.domElement.width, prevH = renderer.domElement.height;
+  renderer.setPixelRatio(1);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.clearViewOffset();
+  const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const d = Math.max(4.9 / (2 * tanH), 5.6 / (2 * tanH * camera.aspect));
+  camera.position.copy(camTarget).addScaledVector(new THREE.Vector3(2.0, 1.5, 12.5).normalize(), d);
+  camera.lookAt(camTarget); camera.updateProjectionMatrix();
+  renderer.render(scene, camera);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  c.getContext('2d').drawImage(renderer.domElement, 0, 0, w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  resize();
+  void prevW; void prevH;
+  return c;
+}
+
+function drawTomato(g, x, y, r) {
+  const gr = g.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
+  gr.addColorStop(0, '#ff8a7a'); gr.addColorStop(0.55, '#e3262b'); gr.addColorStop(1, '#a8151a');
+  g.fillStyle = gr; g.beginPath(); g.ellipse(x, y, r, r * 0.88, 0, 0, TAU); g.fill();
+  g.fillStyle = '#2f9e44';
+  for (let k = 0; k < 5; k++) {
+    const a = -Math.PI / 2 + (k / 5) * TAU;
+    g.beginPath(); g.ellipse(x + Math.cos(a) * r * 0.22, y - r * 0.8 + Math.sin(a) * r * 0.12, r * 0.3, r * 0.1, a, 0, TAU); g.fill();
+  }
+}
+
+function makeCard(pk) {
+  const st = periodStats(pk), t = THEMES[S.theme];
+  const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const ink = t.dark ? '#f2f4f6' : '#1b211e', muted = t.dark ? 'rgba(242,244,246,0.6)' : 'rgba(27,33,30,0.55)';
+  const tile = t.dark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.6)';
+  const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, t.bg1); bg.addColorStop(1, t.bg2);
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const F = (w, s) => `${w} ${s}px Inter, "Helvetica Neue", Arial, sans-serif`;
+
+  // header
+  g.fillStyle = t.body; g.beginPath(); g.roundRect(64, 60, 44, 44, 13); g.fill();
+  g.fillStyle = '#f3f3f1'; g.beginPath(); g.arc(86, 82, 14, 0, TAU); g.fill();
+  g.fillStyle = t.wedge; g.beginPath(); g.moveTo(86, 82); g.arc(86, 82, 14, -Math.PI / 2, 0.6); g.fill();
+  g.fillStyle = ink; g.font = F(700, 34); g.textBaseline = 'middle'; g.fillText('Visual Timer', 124, 84);
+  g.textAlign = 'right'; g.fillStyle = muted; g.font = F(600, 28);
+  const now = new Date();
+  g.fillText(pk === 'today' ? now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+    : pk === 'week' ? 'Last 7 days' : 'All time', W - 64, 84);
+  g.textAlign = 'left';
+
+  // the 3D timer
+  const shot = snapshot(900, 640);
+  g.drawImage(shot, (W - 900) / 2, 120);
+
+  // headline number
+  let y = 820;
+  g.fillStyle = ink; g.textBaseline = 'alphabetic'; g.textAlign = 'center';
+  g.font = F(800, st.sec >= 36000 ? 132 : 150); g.fillText(human(st.sec), W / 2, y);
+  g.fillStyle = muted; g.font = F(600, 34); g.fillText(`of deep focus ${st.label}`, W / 2, y + 56);
+
+  // rank pill
+  g.font = F(800, 34);
+  const rw = g.measureText(st.rank.toUpperCase()).width + 64;
+  g.fillStyle = t.wedge; g.beginPath(); g.roundRect((W - rw) / 2, y + 92, rw, 64, 32); g.fill();
+  g.fillStyle = '#fff'; g.fillText(st.rank.toUpperCase(), W / 2, y + 136);
+
+  // tomato row
+  y = 1050;
+  const shown = Math.min(st.n, 12), r = 24, gap = 60;
+  const x0 = W / 2 - ((shown - 1) * gap) / 2 - (st.n > 12 ? 40 : 0);
+  for (let i = 0; i < shown; i++) drawTomato(g, x0 + i * gap, y, r);
+  g.textAlign = 'left'; g.fillStyle = ink; g.font = F(800, 34);
+  if (st.n > 12) g.fillText(`+${st.n - 12}`, x0 + shown * gap - 20, y + 12);
+  if (!st.n) { g.textAlign = 'center'; g.fillStyle = muted; g.font = F(600, 28); g.fillText('No tomatoes yet. Watch this space.', W / 2, y + 10); }
+
+  // stat tiles
+  y = 1110;
+  const tiles = [[String(st.n), st.n === 1 ? 'session' : 'sessions'], [String(st.streak), 'day streak'],
+    pk === 'today' ? [String(Math.round(st.sec / 60)), 'minutes'] : [human(st.best), 'best day']];
+  const tw = (W - 128 - 32) / 3;
+  tiles.forEach(([v, k], i) => {
+    const x = 64 + i * (tw + 16);
+    g.fillStyle = tile; g.beginPath(); g.roundRect(x, y, tw, 120, 24); g.fill();
+    g.textAlign = 'center'; g.fillStyle = ink; g.font = F(800, 46); g.fillText(v, x + tw / 2, y + 62);
+    g.fillStyle = muted; g.font = F(600, 24); g.fillText(k, x + tw / 2, y + 98);
+  });
+
+  // footer
+  g.fillStyle = muted; g.font = F(600, 26); g.textAlign = 'center';
+  g.fillText('Beat me at  ' + SITE.replace('https://', '').replace(/\/$/, ''), W / 2, H - 52);
+  return { canvas: c, st };
+}
+
+function bragText(pk, st) {
+  const what = pk === 'today' ? 'today' : pk === 'week' ? 'in the last 7 days' : 'so far';
+  const streak = st.streak > 1 ? `, ${st.streak}-day streak` : '';
+  return `I focused ${human(st.sec)} ${what} with ${st.n} 🍅${streak}. Rank: ${st.rank}. Beat that:`;
+}
+
+const shareDlg = $('#share');
+let card = null, cardPeriod = 'today';
+function buildCard() {
+  card = makeCard(cardPeriod);
+  $('#cardImg').src = card.canvas.toDataURL('image/png');
+  document.querySelectorAll('[data-period]').forEach((b) => b.classList.toggle('on', b.dataset.period === cardPeriod));
+  const txt = bragText(cardPeriod, card.st);
+  $('#btnX').href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(txt)}&url=${encodeURIComponent(SITE)}`;
+}
+function openShare() {
+  // default to the period with something to brag about
+  if (!todayFocus().length) cardPeriod = S.history.some((h) => h.p === 'focus') ? 'all' : 'today';
+  buildCard(); shareDlg.showModal();
+}
+document.querySelectorAll('[data-period]').forEach((b) => b.addEventListener('click', () => { cardPeriod = b.dataset.period; buildCard(); }));
+$('#btnBrag').addEventListener('click', openShare);
+const cardBlob = () => new Promise((res) => card.canvas.toBlob(res, 'image/png'));
+$('#btnShareNative').addEventListener('click', async () => {
+  const txt = bragText(cardPeriod, card.st);
+  try {
+    const file = new File([await cardBlob()], 'visual-timer-brag.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], text: `${txt} ${SITE}` });
+    } else if (navigator.share) {
+      await navigator.share({ text: txt, url: SITE });
+    } else {
+      $('#btnSave').click(); toast('Image saved. Attach it anywhere.');
+    }
+  } catch (e) { if (e && e.name !== 'AbortError') toast('Sharing failed. Try saving the image.'); }
+});
+$('#btnSave').addEventListener('click', async () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(await cardBlob());
+  a.download = `visual-timer-${cardPeriod}-${dayKey(Date.now())}.png`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$('#btnCopy').addEventListener('click', async () => {
+  const txt = `${bragText(cardPeriod, card.st)} ${SITE}`;
+  try {
+    if (window.ClipboardItem && navigator.clipboard.write) {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': cardBlob(), 'text/plain': new Blob([txt], { type: 'text/plain' }) })]);
+      toast('Card and text copied');
+    } else { await navigator.clipboard.writeText(txt); toast('Text copied'); }
+  } catch (e) {
+    try { await navigator.clipboard.writeText(txt); toast('Text copied'); } catch (e2) { toast('Copy blocked by the browser'); }
+  }
+});
+
 /* ------------------------------------------------------------------ boot */
 drawFace(S.scale); drawTicks();
 if (document.fonts) document.fonts.ready.then(() => drawFace(S.scale));
@@ -1024,7 +1235,12 @@ if (S.running && Date.now() >= S.endAt) {
   setTimeout(() => toast(`${PHASE_NAME[S.phase]} finished while you were away`), 600);
 }
 syncUI(); resize();
-if (!S.seenHint) {
+if (OG) {
+  document.body.classList.add('og');
+  S.total = 1500; S.remaining = 1100; S.phase = 'focus';
+  for (let i = 0; i < 4; i++) addTomato(false);
+  syncUI(); resize();
+} else if (!S.seenHint) {
   const hint = $('#hint'); hint.hidden = false;
   setTimeout(() => hint.classList.add('fade'), 9000);
 }

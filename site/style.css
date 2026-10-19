@@ -152,6 +152,33 @@ body.dark select option { background: #222; }
 .toggle input:checked + span::after { transform: translateX(12px); }
 .toggle input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* brag card */
+.brag { width: 100%; margin-top: 12px; }
+.share { width: min(460px, calc(100% - 24px)); padding: 16px 18px 18px; }
+.share-head { display: flex; justify-content: space-between; align-items: center; }
+.share-head h2 { margin: 0; }
+.seg { display: flex; background: var(--field); border-radius: 12px; padding: 3px; margin: 12px 0; }
+.seg button { flex: 1; border: 0; background: transparent; padding: 7px 0; border-radius: 9px; font-weight: 600; font-size: 13px; cursor: pointer; color: var(--muted); }
+.seg button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1); }
+.card-img { display: block; width: 100%; max-height: 56vh; object-fit: contain; border-radius: 16px; box-shadow: 0 8px 26px rgba(0, 0, 0, 0.14); background: var(--field); }
+.share-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+.share-actions .btn { text-align: center; text-decoration: none; color: var(--ink); font-size: 14px; padding: 11px 10px; }
+.share-actions .primary { grid-column: 1 / -1; color: #fff; }
+
+/* sharing thumbnail mode (?og) */
+.og-text { display: none; }
+body.og .top, body.og .panel, body.og .hint, body.og .toast { display: none; }
+body.og .og-text {
+  display: flex; flex-direction: column; justify-content: center; gap: 22px;
+  position: fixed; top: 0; bottom: 0; right: 64px; width: 520px;
+}
+.og-brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 26px; }
+.og-brand .logo { width: 34px; height: 34px; border-radius: 10px; box-shadow: inset 0 0 0 7px var(--body), inset 0 0 0 17px #f3f3f1; }
+.og-brand .logo::after { inset: 7px; }
+.og-text h1 { margin: 0; font-size: 66px; line-height: 1.04; letter-spacing: -0.035em; font-weight: 800; }
+.og-text p { margin: 0; font-size: 24px; line-height: 1.4; color: var(--muted); max-width: 470px; }
+.og-url { font-size: 20px; font-weight: 700; color: var(--accent); }
+
 /* record drawer */
 .drawer {
   position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100%);
